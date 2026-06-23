@@ -44,8 +44,7 @@ PACKAGES="$PACKAGES luci-i18n-package-manager-zh-cn"
 PACKAGES="$PACKAGES luci-i18n-ttyd-zh-cn"
 PACKAGES="$PACKAGES openssh-sftp-server"
 
-# 科学上网
-PACKAGES="$PACKAGES luci-app-nikki luci-i18n-nikki-zh-cn"
+# 科学上网（25.12 支持 passwall/daed/homeproxy，不支持 nikki）
 PACKAGES="$PACKAGES luci-app-passwall luci-i18n-passwall-zh-cn"
 
 # DDNS-Go

@@ -58,15 +58,16 @@ if [ "$INCLUDE_DOCKER" = "yes" ]; then
     echo "Adding Docker packages"
 fi
 
-# OpenClash 内核
-if echo "$PACKAGES" | grep -q "luci-app-openclash"; then
-    echo "✅ 已选择 luci-app-openclash，添加内核"
-    mkdir -p files/etc/openclash/core
-    META_URL="https://raw.githubusercontent.com/vernesong/OpenClash/core/master/meta/clash-linux-arm64.tar.gz"
-    wget -qO- $META_URL | tar xOvz > files/etc/openclash/core/clash_meta && chmod +x files/etc/openclash/core/clash_meta
-    wget -q https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat -O files/etc/openclash/GeoIP.dat
-    wget -q https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat -O files/etc/openclash/GeoSite.dat
-fi
+# OpenClash + mihomo 核心（预装 mihomo 内核+GeoIP）
+PACKAGES="$PACKAGES luci-app-openclash"
+echo "✅ 添加 luci-app-openclash + mihomo 内核"
+mkdir -p files/etc/openclash/core
+# 下载 mihomo 内核（OpenClash 官方源）
+META_URL="https://raw.githubusercontent.com/vernesong/OpenClash/core/master/meta/clash-linux-arm64.tar.gz"
+wget -qO- $META_URL | tar xOvz > files/etc/openclash/core/clash_meta 2>/dev/null && chmod +x files/etc/openclash/core/clash_meta || echo "⚠️ mihomo 内核下载失败"
+# GeoIP/GeoSite
+wget -q https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat -O files/etc/openclash/GeoIP.dat 2>/dev/null
+wget -q https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat -O files/etc/openclash/GeoSite.dat 2>/dev/null
 
 # 构建镜像
 echo "$(date '+%Y-%m-%d %H:%M:%S') - Building image..."

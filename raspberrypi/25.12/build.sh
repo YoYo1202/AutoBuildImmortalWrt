@@ -5,17 +5,19 @@ echo "Building for profile: $PROFILE"
 echo "Include Docker: $INCLUDE_DOCKER"
 echo "Building for ROOTFS_PARTSIZE: $ROOTSIZE"
 
-if [ -z "$CUSTOM_PACKAGES" ]; then
-  echo "⚪️ 未选择 任何第三方软件包"
-else
-  echo "🔄 正在同步第三方软件仓库..."
-  git clone --depth=1 https://github.com/wukongdaily/store.git /tmp/store-run-repo
-  mkdir -p /home/build/immortalwrt/extra-packages
-  cp -r /tmp/store-run-repo/run/arm64/* /home/build/immortalwrt/extra-packages/
-  echo "✅ Run files copied to extra-packages:"
-  ls -lh /home/build/immortalwrt/extra-packages/*.run
-  sh shell/prepare-packages.sh
-  ls -lah /home/build/immortalwrt/packages/
+# 25.12 使用 apk，跳过 run 文件处理（store 在 25.12 暂不支持）
+# 只保留第三方 ipk 包处理
+if [ -n "$CUSTOM_PACKAGES" ]; then
+  # 检查是否有 store 包名，有则跳过（25.12 不支持）
+  if echo "$CUSTOM_PACKAGES" | grep -q "luci-app-store"; then
+    echo "⚠️ 25.12 暂不支持 luci-app-store，已跳过"
+  fi
+  
+  # 如果有其他 run 文件或 ipk，仍然处理
+  if ls /home/build/immortalwrt/extra-packages/*.run 2>/dev/null | head -1; then
+    echo "🔄 处理第三方包..."
+    sh shell/prepare-packages.sh 2>/dev/null || true
+  fi
 fi
 
 LUCI_VERSION="${LUCI_VERSION:-25.12.0}"
@@ -26,8 +28,7 @@ case "$PROFILE" in
   *)     CPU_ARCH="aarch64_generic" ;;
 esac
 
-# 25.12 使用 apk 包管理器，不需要修改 repositories.conf
-echo "✅ 25.12 使用 apk，跳过 repositories.conf 修改"
+echo "✅ 25.12 使用 apk 包管理器"
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') - Starting build process..."
 
@@ -42,12 +43,20 @@ PACKAGES="$PACKAGES luci-i18n-diskman-zh-cn"
 PACKAGES="$PACKAGES luci-i18n-package-manager-zh-cn"
 PACKAGES="$PACKAGES luci-i18n-ttyd-zh-cn"
 PACKAGES="$PACKAGES openssh-sftp-server"
+
+# 科学上网
+PACKAGES="$PACKAGES luci-app-nikki luci-i18n-nikki-zh-cn"
+PACKAGES="$PACKAGES luci-app-passwall luci-i18n-passwall-zh-cn"
+
+# DDNS-Go
+PACKAGES="$PACKAGES luci-i18n-ddns-go-zh-cn ddns-go"
+
 PACKAGES="$PACKAGES $CUSTOM_PACKAGES"
 
 # Docker
 if [ "$INCLUDE_DOCKER" = "yes" ]; then
-    PACKAGES="$PACKAGES luci-i18n-dockerman-zh-cn"
-    echo "Adding package: luci-i18n-dockerman-zh-cn"
+    PACKAGES="$PACKAGES luci-i18n-dockerman-zh-cn docker dockerd docker-compose"
+    echo "Adding Docker packages"
 fi
 
 # OpenClash 内核
@@ -55,19 +64,14 @@ if echo "$PACKAGES" | grep -q "luci-app-openclash"; then
     echo "✅ 已选择 luci-app-openclash，添加内核"
     mkdir -p files/etc/openclash/core
     META_URL="https://raw.githubusercontent.com/vernesong/OpenClash/core/master/meta/clash-linux-arm64.tar.gz"
-    wget -qO- $META_URL | tar xOvz > files/etc/openclash/core/clash_meta
-    chmod +x files/etc/openclash/core/clash_meta
+    wget -qO- $META_URL | tar xOvz > files/etc/openclash/core/clash_meta && chmod +x files/etc/openclash/core/clash_meta
     wget -q https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat -O files/etc/openclash/GeoIP.dat
     wget -q https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat -O files/etc/openclash/GeoSite.dat
-    URL=$(curl -s https://api.github.com/repos/vernesong/OpenClash/releases/latest \
-      | grep "browser_download_url.*ipk" | head -n1 | cut -d '"' -f 4)
-    echo "OpenClash latest: $URL"
-    wget "$URL" -P /home/build/immortalwrt/packages/
 fi
 
 # 构建镜像
 echo "$(date '+%Y-%m-%d %H:%M:%S') - Building image..."
-echo "$PACKAGES"
+echo "Packages: $PACKAGES"
 make image PROFILE=$PROFILE PACKAGES="$PACKAGES" FILES="/home/build/immortalwrt/files" ROOTFS_PARTSIZE=$ROOTSIZE
 
 if [ $? -ne 0 ]; then

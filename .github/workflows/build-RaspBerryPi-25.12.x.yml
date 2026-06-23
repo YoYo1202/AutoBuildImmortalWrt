@@ -20,10 +20,10 @@ on:
         options:
           - 25.12.0
       enable_store:
-        description: "集成 store 商店"
+        description: "集成 store 商店（25.12暂不支持）"
         required: false
         type: boolean
-        default: true
+        default: false
       include_docker:
         description: | 
           是否编译 Docker 插件
@@ -56,10 +56,7 @@ jobs:
       - name: Enable Store integration
         run: |
           if [ "${{ github.event.inputs.enable_store }}" == "true" ]; then
-            echo 'CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-store"' >> shell/custom-packages.sh
-            echo "✅ 已追加 luci-app-store"
-          else
-            echo "❎ 未启用 luci-app-store"
+            echo "⚠️ 25.12 暂不支持 luci-app-store，已忽略"
           fi
       
       - name: Build raspberrypi ImmortalWrt 25.12.x

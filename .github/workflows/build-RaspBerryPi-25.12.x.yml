@@ -98,11 +98,24 @@ jobs:
       
       - name: Create info
         run: |
-          if [ "${{ github.event.inputs.include_docker }}" == "yes" ]; then
-            extra_content="### 默认带docker"
-            echo -e "\n $extra_content" >> ${{ github.workspace }}/info.md
-          fi
-          echo -e "\n### ImmortalWrt 25.12.0 for RPi" >> ${{ github.workspace }}/info.md
+          {
+            echo "## ImmortalWrt 25.12.0 for RPi 4B"
+            echo ""
+            echo "### Pre-installed Plugins"
+            echo "- OpenClash (mihomo core + GeoIP/GeoSite)"
+            echo "- Passwall"
+            echo "- DAED"
+            echo "- DDNS-Go (Cloudflare)"
+            echo "- Docker + dockerd + docker-compose + Docker Manager"
+            echo "- Argon theme + config"
+            echo "- FileBrowser + DiskMan"
+            echo "- TTYD + curl + openssh-sftp-server"
+            echo ""
+            echo "### Defaults"
+            echo "- IP: DHCP (single NIC)"
+            echo "- Size: ${{ github.event.inputs.size }}MB"
+            echo "- Docker: ${{ github.event.inputs.include_docker }}"
+          } > ${{ github.workspace }}/info.md
  
       - name: Upload ImmortalWrt as release assets
         uses: softprops/action-gh-release@v3

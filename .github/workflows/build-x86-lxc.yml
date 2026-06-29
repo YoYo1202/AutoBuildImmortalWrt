@@ -60,21 +60,19 @@ jobs:
         run: |
           cd ${{ github.workspace }}/bin/targets/x86/64/
 
-          # 先看有没有直接生成的 rootfs.tar.gz
           if ls *rootfs.tar.gz 2>/dev/null; then
-            echo "✅ rootfs.tar.gz 已存在，直接使用"
+            echo "✅ rootfs.tar.gz 已存在"
           else
             echo "⚙️ 从 ext4-rootfs.img 提取 rootfs.tar.gz..."
             EXT4_IMG=$(ls *generic-ext4-rootfs.img.gz 2>/dev/null | head -1)
             if [ -z "$EXT4_IMG" ]; then
-              # 回退：从 ext4-combined 镜像提取（需跳过内核分区）
               COMBINED=$(ls *generic-ext4-combined-efi.img.gz 2>/dev/null | head -1)
               if [ -z "$COMBINED" ]; then
                 echo "❌ 找不到可提取的镜像文件"
                 ls -la
                 exit 1
               fi
-              echo "→ 从 combined 镜像提取（跳过内核分区）"
+              echo "→ 从 combined 镜像提取"
               zcat "$COMBINED" > combined.img
               ROOTFS_OFFSET=$(fdisk -l -o Start combined.img | tail -1 | tr -d ' ')
               mount -o loop,offset=$((ROOTFS_OFFSET * 512)) combined.img /mnt
@@ -83,13 +81,41 @@ jobs:
               zcat "$EXT4_IMG" > rootfs.img
               mount -o loop rootfs.img /mnt
             fi
-
             tar czf immortalwrt-x86-64-generic-rootfs.tar.gz -C /mnt .
             umount /mnt
-            echo "✅ rootfs.tar.gz 提取完成"
           fi
 
-          ls -lh *rootfs.tar.gz
+      - name: Fix os-release for PVE compatibility
+        run: |
+          cd ${{ github.workspace }}/bin/targets/x86/64/
+          ROOTFS_TAR=$(ls *rootfs.tar.gz 2>/dev/null | head -1)
+          if [ -z "$ROOTFS_TAR" ]; then
+            echo "❌ 找不到 rootfs.tar.gz"
+            ls -la
+            exit 1
+          fi
+          echo "→ 原始 os-release:"
+          tar xzf "$ROOTFS_TAR" -C /tmp etc/os-release 2>/dev/null
+          grep -E '^(ID=|ID_LIKE=|VERSION_ID=)' /tmp/etc/os-release 2>/dev/null || echo "(无 os-release)"
+
+          # 解压、修改、重新打包
+          mkdir -p /tmp/fix_rootfs
+          tar xzf "$ROOTFS_TAR" -C /tmp/fix_rootfs
+
+          if [ -f /tmp/fix_rootfs/etc/os-release ]; then
+            sed -i 's/^ID=immortalwrt/ID=openwrt/' /tmp/fix_rootfs/etc/os-release
+            sed -i '/^ID_LIKE=/d' /tmp/fix_rootfs/etc/os-release
+            echo 'ID_LIKE="openwrt"' >> /tmp/fix_rootfs/etc/os-release
+            echo "→ 修改后:"
+            grep -E '^(ID=|ID_LIKE=)' /tmp/fix_rootfs/etc/os-release
+          else
+            echo "⚠️ 无 os-release 文件，无需修改"
+          fi
+
+          rm -f "$ROOTFS_TAR"
+          tar czf "$ROOTFS_TAR" -C /tmp/fix_rootfs .
+          rm -rf /tmp/fix_rootfs /tmp/etc
+          echo "✅ os-release 已修复"
 
       - name: Upload LXC template as release asset
         uses: softprops/action-gh-release@v3
@@ -100,12 +126,10 @@ jobs:
 
             ### 在 PVE 上创建 LXC 容器
             ```bash
-            # 下载到 PVE
             cd /var/lib/vz/template/cache/
-            # 从 Release 下载 rootfs.tar.gz 放到此目录
+            # 从 Release 下载 *rootfs.tar.gz 到此目录
 
-            # 创建容器
-            pct create <CTID> /var/lib/vz/template/cache/immortalwrt-x86-64-generic-rootfs.tar.gz \
+            pct create 100 immortalwrt-x86-64-generic-rootfs.tar.gz \
               --arch amd64 \
               --ostype unmanaged \
               --rootfs local-lvm:1 \
@@ -113,11 +137,8 @@ jobs:
               --cores 2 \
               --unprivileged 1
 
-            # 设置网络（桥接到 vmbr0）
-            pct set <CTID> --net0 name=eth0,bridge=vmbr0,firewall=0
-
-            # 启动
-            pct start <CTID>
+            pct set 100 --net0 name=eth0,bridge=vmbr0,firewall=0
+            pct start 100
             ```
 
             ### 预装插件
